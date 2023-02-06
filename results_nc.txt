@@ -1,0 +1,11 @@
+Using original adjacency matrix:
+Test accuracy=0.66950
+Random adjacency matrix:
+Test accuracy=0.49923
+Maximum adjacency matrix:
+Test accuracy=0.62483
+Minimum adjacency matrix:
+Test accuracy=0.55860
+Learned adjacency matrix:
+Test accuracy=0.60829
+
