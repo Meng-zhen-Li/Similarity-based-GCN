@@ -19,6 +19,7 @@ FLAGS = flags.FLAGS
 
 
 def train(adj, similarity, features):
+    tf.reset_default_graph()
 
     placeholders = {
         'features': tf.sparse_placeholder(tf.float32),
@@ -30,11 +31,14 @@ def train(adj, similarity, features):
     num_features = features[2][1]
     features_nonzero = features[1].shape[0]
 
-    similarity = sparse_to_tuple(similarity + sp.eye(similarity.shape[0]))
+    similarity = similarity + sp.eye(similarity.shape[0])
+    similarity = similarity / np.sum(similarity.data)
+    similarity = sparse_to_tuple(similarity)
 
     model = GCNModel(placeholders, num_features, features_nonzero)
     with tf.name_scope('optimizer'):
         opt = Optimizer(preds=model.reconstructions, labels=tf.reshape(tf.sparse_tensor_to_dense(placeholders['similarity'],validate_indices=False), [-1]))
+        # opt = Optimizer(preds=model.reconstructions, labels=tf.sparse_tensor_to_dense(placeholders['similarity']))
     
     # Initialize session
     sess = tf.Session()
@@ -54,7 +58,7 @@ def train(adj, similarity, features):
         # Compute average loss
         avg_cost = outs[1]
 
-        print("Test set results:", "cost=", "{:.5f}".format(avg_cost), "time=", "{:.5f}".format(time.time() - t))
+        print("Epoch:", '%04d' % (epoch + 1), "Test set results:", "cost=", "{:.5f}".format(avg_cost), "time=", "{:.5f}".format(time.time() - t))
 
     print("Optimization Finished!")
     
