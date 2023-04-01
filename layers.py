@@ -88,15 +88,29 @@ class GraphConvolution(Layer):
 
 class InnerProductDecoder(Layer):
     """Decoder model layer for link prediction."""
-    def __init__(self, input_dim, dropout=0., act=tf.nn.sigmoid, **kwargs):
+    def __init__(self, input_dim, num_graphs=1, dropout=0., act=tf.nn.sigmoid, **kwargs):
         super(InnerProductDecoder, self).__init__(**kwargs)
+        for i in range(num_graphs):
+            idx = 'weights' + str(i)
+            self.vars[idx] = weight_variable_glorot(input_dim, input_dim, name="weights")
+        self.num_graphs = num_graphs
         self.dropout = dropout
         self.act = act
+        self.input_dim = input_dim
 
     def _call(self, inputs):
         inputs = tf.nn.dropout(inputs, 1-self.dropout)
-        x = tf.transpose(inputs)
-        x = tf.matmul(inputs, x)
-        x = tf.reshape(x, [-1])
-        outputs = self.act(x)
+
+        for i in range(self.num_graphs):
+            idx = 'weights' + str(i)
+            # x = tf.matmul(inputs, self.vars[idx])
+            if i == 0:
+                # outputs = tf.matmul(x, tf.transpose(x))
+                outputs = tf.matmul(tf.matmul(inputs, self.vars[idx]), tf.transpose(inputs))
+            else:
+                # outputs = tf.concat([outputs, tf.matmul(x, tf.transpose(x))], 0)
+                outputs = tf.concat([outputs, tf.matmul(tf.matmul(inputs, self.vars[idx]), tf.transpose(inputs))], 0)
+
+        # outputs = tf.reshape(outputs, [-1])
+        outputs = self.act(outputs)
         return outputs

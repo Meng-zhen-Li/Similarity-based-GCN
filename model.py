@@ -10,8 +10,6 @@ class Model(object):
         for kwarg in kwargs.keys():
             assert kwarg in allowed_kwargs, 'Invalid keyword argument: ' + kwarg
 
-        for kwarg in kwargs.keys():
-            assert kwarg in allowed_kwargs, 'Invalid keyword argument: ' + kwarg
         name = kwargs.get('name')
         if not name:
             name = self.__class__.__name__.lower()
@@ -40,7 +38,7 @@ class Model(object):
 
 
 class GCNModel(Model):
-    def __init__(self, placeholders, num_features, features_nonzero, **kwargs):
+    def __init__(self, placeholders, num_features, features_nonzero, num_graphs, **kwargs):
         super(GCNModel, self).__init__(**kwargs)
 
         self.inputs = placeholders['features']
@@ -48,6 +46,7 @@ class GCNModel(Model):
         self.adj = placeholders['adj']
         self.dropout = placeholders['dropout']
         self.features_nonzero = features_nonzero
+        self.num_graphs = num_graphs
         self.build()
 
     def _build(self):
@@ -63,10 +62,9 @@ class GCNModel(Model):
                                            output_dim=FLAGS.hidden2,
                                            adj=self.adj,
                                            features_nonzero=self.features_nonzero,
-                                           act=tf.nn.relu,
+                                           act=lambda x: x,
                                            dropout=self.dropout)(self.hidden1)
 
-        self.z_mean = self.embeddings
-
         self.reconstructions = InnerProductDecoder(input_dim=FLAGS.hidden2,
-                                      act=lambda x: x)(self.embeddings)
+                                           num_graphs = self.num_graphs,
+                                           act=lambda x: x)(self.embeddings)

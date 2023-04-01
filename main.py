@@ -5,31 +5,27 @@ from evaluation import *
 from gcn_eval.train import *
 
 from utils import preprocess_graph, preprocess_features
-from similarity import similarity_matrix, normalize_rowsum
+from similarity import similarity_matrix
 from input_data import load_data
 from train import train
-from consensus import consensus
+from sklearn.preprocessing import normalize
 
 import scipy.sparse as sp
-from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
 import tensorflow.compat.v1 as tf
 
 import os
 from scipy.io import loadmat, savemat
 
-os.environ['CUDA_VISIBLE_DEVICES'] = ""
 tf.disable_eager_execution()
 
 # Settings
 flags = tf.app.flags
 FLAGS = flags.FLAGS
-flags.DEFINE_float('learning_rate', 0.02, 'Initial learning rate.')
-flags.DEFINE_integer('epochs', 200, 'Number of epochs to train.')
-flags.DEFINE_integer('hidden1', 128, 'Number of units in hidden layer 1.')
-flags.DEFINE_integer('hidden2', 64, 'Number of units in hidden layer 2.')
-flags.DEFINE_float('weight_decay', 0, 
-                   'Weight for L2 loss on embedding matrix.')
+flags.DEFINE_float('learning_rate', 0.03, 'Initial learning rate.')
+flags.DEFINE_integer('epochs', 1000, 'Number of epochs to train.')
+flags.DEFINE_integer('hidden1', 32, 'Number of units in hidden layer 1.')
+flags.DEFINE_integer('hidden2', 16, 'Number of units in hidden layer 2.')
 flags.DEFINE_float('dropout', 0, 'Dropout rate (1 - keep probability).')
 
 flags.DEFINE_string('dataset', 'STRING_PPI', 'Dataset string.')
@@ -51,8 +47,15 @@ features = preprocess_features(features)
 # Link Prediction
 if FLAGS.task == 'link_prediction':
     f = open("results_lp.txt","a")
+    adj_norm = preprocess_graph(adj)
     similarities = similarity_matrix(adj_train)
-    adj_pred = train_gae(preprocess_graph(adj_train), adj_train, features, val_edges, val_edges_false)
+    
+    for i in range(len(similarities)):
+        similarities[i] = similarities[i] - sp.dia_matrix((similarities[i].diagonal()[np.newaxis, :], [0]), shape=similarities[i].shape)
+        similarities[i] = similarities[i] / np.max(similarities[i])
+        similarities[i].eliminate_zeros()
+        similarities[i] = similarities[i] + sp.eye(similarities[i].shape[0])
+    """ adj_pred = train_gae(preprocess_graph(adj_train), adj_train, features, val_edges, val_edges_false)
     roc_score, ap_score = get_roc_score(test_edges, test_edges_false, adj_pred)
     f.write("Using original adjacency matrix:\n")
     f.write('Test AUC score: ')
@@ -62,14 +65,10 @@ if FLAGS.task == 'link_prediction':
     f.write("{:.5f}".format(ap_score))
     f.write('\n')
 
-    embeddings = []
-    adj_learned = preprocess_graph(adj_train)
     adj_max = similarities[0]
     adj_min = similarities[0]
     f.write('Using similarity matrices:\n')
     for similarity in similarities:
-        similarity = similarity - sp.dia_matrix((similarity.diagonal()[np.newaxis, :], [0]), shape=similarity.shape)
-        similarity = similarity / np.max(similarity)
         similarity_norm = preprocess_graph(similarity)
         adj_pred = train_gae(similarity_norm, adj_train, features, val_edges, val_edges_false)
         roc_score, ap_score = get_roc_score(test_edges, test_edges_false, adj_pred)
@@ -81,8 +80,6 @@ if FLAGS.task == 'link_prediction':
         f.write('\n')
         adj_max = adj_max.maximum(similarity)
         adj_min = adj_min.minimum(similarity)
-        emb = train(adj_learned, similarity, features)
-        embeddings.append(emb)
 
     adj_random = sp.random(adj.shape[0], adj.shape[0], density=adj.count_nonzero()/adj.shape[0]/adj.shape[0])
     adj_random = adj_random / adj_random.max()
@@ -116,19 +113,15 @@ if FLAGS.task == 'link_prediction':
     f.write('\t')
     f.write('Test AUPR score: ')
     f.write("{:.5f}".format(ap_score))
-    f.write('\n')
+    f.write('\n') """
 
-    emb = consensus(embeddings)
+    emb = train(adj_norm, similarities, features)
     adj_learned = sp.csr_matrix(np.dot(emb, emb.T))
-    # adj_learned = sp.csr_matrix(cosine_similarity(emb))
     adj_learned = adj_learned - sp.dia_matrix((adj_learned.diagonal()[np.newaxis, :], [0]), shape=adj_learned.shape)
     thr = np.min(np.max(adj_learned, 1))
     adj_learned.data[adj_learned.data < thr] = 0
     adj_learned.eliminate_zeros()
-    if thr < 0:
-        adj_learned.data = adj_learned.data - thr
     adj_learned = adj_learned / np.max(adj_learned)
-    # adj_learned = normalize_rowsum(adj_learned)
     adj_learned = preprocess_graph(adj_learned)
     adj_pred = train_gae(adj_learned, adj_train, features, val_edges, val_edges_false)
     roc_score, ap_score = get_roc_score(test_edges, test_edges_false, adj_pred)
@@ -145,7 +138,13 @@ if FLAGS.task == 'link_prediction':
 if FLAGS.task == 'node_classification':
     f = open("results_nc.txt","a")
     adj_norm = preprocess_graph(adj)
-    placeholders, sess, opt, model = train_gcn(adj_norm, y_train, features, train_mask, y_val, val_mask)
+    similarities = similarity_matrix(adj)
+    for i in range(len(similarities)):
+        similarities[i] = similarities[i] - sp.dia_matrix((similarities[i].diagonal()[np.newaxis, :], [0]), shape=similarities[i].shape)
+        similarities[i] = similarities[i] / np.max(similarities[i])
+        similarities[i].eliminate_zeros()
+        similarities[i] = similarities[i] + sp.eye(similarities[i].shape[0])
+    """ placeholders, sess, opt, model = train_gcn(adj_norm, y_train, features, train_mask, y_val, val_mask)
     _, auc, ap = evaluate(features, preprocess_graph(adj), y_test, test_mask, placeholders, sess, opt, model)
     f.write('Using original adjacency matrix:\n')
     f.write("Test AUC score: ")
@@ -155,17 +154,10 @@ if FLAGS.task == 'node_classification':
     f.write("{:.5f}".format(ap))
     f.write('\n')
 
-    f.write('Using similarity matrices:\n')
-    similarities = similarity_matrix(adj)
     adj_max = similarities[0]
     adj_min = similarities[0]
-    embeddings = []
+    f.write('Using similarity matrices:\n')
     for similarity in similarities:
-        similarity = similarity - sp.dia_matrix((similarity.diagonal()[np.newaxis, :], [0]), shape=similarity.shape)
-        similarity = similarity / np.max(similarity)
-        similarity.eliminate_zeros()
-        emb = train(adj_norm, similarity, features)
-        embeddings.append(emb)
         similarity_norm = preprocess_graph(similarity)
         placeholders, sess, opt, model = train_gcn(similarity_norm, y_train, features, train_mask, y_val, val_mask)
         _, auc, ap = evaluate(features, similarity_norm, y_test, test_mask, placeholders, sess, opt, model)
@@ -211,20 +203,21 @@ if FLAGS.task == 'node_classification':
     f.write('\t')
     f.write('Test AUPR score: ')
     f.write("{:.5f}".format(ap))
-    f.write('\n')
+    f.write('\n') """
 
-    emb = consensus(embeddings)
-    # adj_learned = sp.csr_matrix(cosine_similarity(emb))
+    emb = train(adj_norm, similarities, features)
     adj_learned = sp.csr_matrix(np.dot(emb, emb.T))
+    # savemat('output.mat', {'adj':adj_learned})
+    # emb = loadmat('output.mat')['adj']
     adj_learned = adj_learned - sp.dia_matrix((adj_learned.diagonal()[np.newaxis, :], [0]), shape=adj_learned.shape)
-    # thr = np.min(np.max(adj_learned, 1))
-    thr = np.min(np.sort(adj_learned.todense())[:,-100])
+    print(np.where(~adj_learned.todense().any(axis=1))[0])
+    thr = np.min(np.max(adj_learned, 1))
+    if thr < 0:
+        thr = 0
     adj_learned.data[adj_learned.data < thr] = 0
     adj_learned.eliminate_zeros()
-    if thr < 0:
-        adj_learned.data = adj_learned.data - thr
+    print(adj_learned.count_nonzero()/adj_learned.shape[0]/adj_learned.shape[0])
     adj_learned = adj_learned / np.max(adj_learned)
-    adj_learned.data = np.random.rand(len(adj_learned.data))
     adj_learned = preprocess_graph(adj_learned)
     placeholders, sess, opt, model = train_gcn(adj_learned, y_train, features, train_mask, y_val, val_mask)
     _, auc, ap = evaluate(features, adj_learned, y_test, test_mask, placeholders, sess, opt, model)
