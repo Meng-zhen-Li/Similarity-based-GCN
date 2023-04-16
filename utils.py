@@ -1,6 +1,5 @@
 import numpy as np
 import scipy.sparse as sp
-from scipy.linalg import issymmetric
 
 import tensorflow.compat.v1 as tf
 
@@ -12,12 +11,13 @@ def sample_mask(idx, l):
     return np.array(mask, dtype=np.bool)
 
 
-def construct_feed_dict(adj, similarity, features, placeholders):
+def construct_feed_dict(adj, similarity, features, placeholders, sim_idx=0):
     # construct feed dictionary
     feed_dict = dict()
     feed_dict.update({placeholders['features']: features})
     feed_dict.update({placeholders['adj']: adj})
     feed_dict.update({placeholders['similarity']: similarity})
+    feed_dict.update({placeholders['sim_idx']: sim_idx})
     return feed_dict
 
 
@@ -40,12 +40,20 @@ def sparse_to_tuple(sparse_mx):
     return coords, values, shape
 
 
-def preprocess_graph(adj):
+def preprocess_graph(adj, return_sparse=False):
     adj = sp.coo_matrix(adj)
-    adj_ = adj + sp.eye(adj.shape[0])
+    if np.sum(adj.diagonal()) == 0:
+        adj_ = adj + sp.eye(adj.shape[0])
+    else:
+        adj_ = adj
     rowsum = np.array(adj_.sum(1))
-    degree_mat_inv_sqrt = sp.diags(np.power(rowsum, -0.5).flatten())
-    adj_normalized = adj_.dot(degree_mat_inv_sqrt).transpose().dot(degree_mat_inv_sqrt).tocoo()
+    d_inv_sqrt = np.power(rowsum, -0.5).flatten()
+    d_inv_sqrt[np.isinf(d_inv_sqrt)] = 0.
+    d_mat_inv_sqrt = sp.diags(d_inv_sqrt)
+    adj_normalized = adj_.dot(d_mat_inv_sqrt).transpose().dot(
+        d_mat_inv_sqrt).tocoo()
+    if return_sparse:
+        return adj_normalized
     return sparse_to_tuple(adj_normalized)
 
 

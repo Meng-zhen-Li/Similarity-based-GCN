@@ -85,14 +85,37 @@ class GraphConvolution(Layer):
         outputs = self.act(x)
         return outputs
 
+class LinearLayer(Layer):
+    def __init__(self, input_dim, output_dim, sim_idx=0, num_graphs=1, dropout=0., act=tf.nn.sigmoid, **kwargs):
+        super(LinearLayer, self).__init__(**kwargs)
+        with tf.variable_scope(self.name + '_vars'):
+            self.vars['weights'] = weight_variable_glorot(input_dim, output_dim * num_graphs, name="weights")
+        self.num_graphs = num_graphs
+        self.dropout = dropout
+        self.act = act
+        self.input_dim = input_dim
+        self.sim_idx = sim_idx
+
+    def _call(self, inputs):
+        inputs = tf.nn.dropout(inputs, 1-self.dropout)
+        if FLAGS.distributed == 1:
+            weights = tf.gather(self.vars['weights'], tf.range(self.input_dim) + self.sim_idx * self.input_dim, axis=1)
+            outputs = tf.matmul(inputs, weights)
+        else:
+            for i in range(self.num_graphs):
+                weights = tf.gather(self.vars['weights'], tf.range(self.input_dim) + i * self.input_dim, axis=1)
+                x = tf.matmul(inputs, weights)
+                if i == 0:
+                    outputs = x
+                else:
+                    outputs = tf.concat([outputs, x], 0)
+        outputs = self.act(outputs)
+        return outputs
 
 class InnerProductDecoder(Layer):
     """Decoder model layer for link prediction."""
     def __init__(self, input_dim, num_graphs=1, dropout=0., act=tf.nn.sigmoid, **kwargs):
         super(InnerProductDecoder, self).__init__(**kwargs)
-        for i in range(num_graphs):
-            idx = 'weights' + str(i)
-            self.vars[idx] = weight_variable_glorot(input_dim, input_dim, name="weights")
         self.num_graphs = num_graphs
         self.dropout = dropout
         self.act = act
@@ -100,17 +123,15 @@ class InnerProductDecoder(Layer):
 
     def _call(self, inputs):
         inputs = tf.nn.dropout(inputs, 1-self.dropout)
+        if FLAGS.distributed == 1:
+            outputs = tf.matmul(inputs, tf.transpose(inputs))
+        else:
+            x = tf.split(inputs, self.num_graphs)
+            for i in range(self.num_graphs):
+                if i == 0:
+                    outputs = tf.matmul(x[i], tf.transpose(x[i]))
+                else:
+                    outputs = tf.concat([outputs, tf.matmul(x[i], tf.transpose(x[i]))], 0)
 
-        for i in range(self.num_graphs):
-            idx = 'weights' + str(i)
-            # x = tf.matmul(inputs, self.vars[idx])
-            if i == 0:
-                # outputs = tf.matmul(x, tf.transpose(x))
-                outputs = tf.matmul(tf.matmul(inputs, self.vars[idx]), tf.transpose(inputs))
-            else:
-                # outputs = tf.concat([outputs, tf.matmul(x, tf.transpose(x))], 0)
-                outputs = tf.concat([outputs, tf.matmul(tf.matmul(inputs, self.vars[idx]), tf.transpose(inputs))], 0)
-
-        # outputs = tf.reshape(outputs, [-1])
         outputs = self.act(outputs)
         return outputs

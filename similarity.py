@@ -1,13 +1,12 @@
 import numpy as np
 import scipy.sparse as sp
 import networkx as nx
-from itertools import combinations
 
 def similarity_matrix(adj):
-    n = adj.shape[0]
-    # G = nx.from_scipy_sparse_array(adj)
+    """ n = adj.shape[0]
+    G = nx.from_scipy_sparse_array(adj)
 
-    """ simrank = nx.simrank_similarity(G)
+    simrank = nx.simrank_similarity(G)
     simrank = sp.csr_matrix([[simrank[u][v] for v in G] for u in G]) """
 
     degrees = adj.sum(axis=0)
@@ -37,13 +36,13 @@ def similarity_matrix(adj):
     S2 = S
     A = alpha * S
     alpha2 = alpha
-    for i in range(1, 3):
+    for i in range(3):
         S2 = S2 * S
         alpha2 = alpha2 * alpha
         A = A + alpha2 * S2
     A.data[np.isnan(A.data)] = 0
     A.data[np.isinf(A.data)] = 0
-    von_neumann = A
+    von_neumann = A + A.transpose()
 
     D = sp.csr_matrix(np.sum(adj, axis=0))
     D[D == 0] = 1
@@ -60,6 +59,7 @@ def similarity_matrix(adj):
         A = A + alpha2 * S2
     A.data[np.isnan(A.data)] = 0
     A.data[np.isinf(A.data)] = 0
-    rwr = A
+    rwr = A + A.transpose()
 
-    return [adamic_adar, jaccard_index, von_neumann, rwr, adj]
+    # return [adamic_adar, jaccard_index, von_neumann, rwr, adj + sp.eye(adj.shape[0])]
+    return [adamic_adar, von_neumann, rwr, adj + sp.eye(adj.shape[0])]

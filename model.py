@@ -1,4 +1,4 @@
-from layers import GraphConvolution, InnerProductDecoder
+from layers import GraphConvolution, InnerProductDecoder, LinearLayer
 import tensorflow.compat.v1 as tf
 
 flags = tf.app.flags
@@ -44,6 +44,7 @@ class GCNModel(Model):
         self.inputs = placeholders['features']
         self.input_dim = num_features
         self.adj = placeholders['adj']
+        self.sim_idx = placeholders['sim_idx']
         self.dropout = placeholders['dropout']
         self.features_nonzero = features_nonzero
         self.num_graphs = num_graphs
@@ -58,12 +59,19 @@ class GCNModel(Model):
                                               sparse_inputs=True,
                                               dropout=self.dropout)(self.inputs)
 
-        self.embeddings = GraphConvolution(input_dim=FLAGS.hidden1,
+        self.hidden2 = GraphConvolution(input_dim=FLAGS.hidden1,
                                            output_dim=FLAGS.hidden2,
                                            adj=self.adj,
                                            features_nonzero=self.features_nonzero,
-                                           act=lambda x: x,
+                                           act=tf.nn.relu,
                                            dropout=self.dropout)(self.hidden1)
+
+        self.embeddings = LinearLayer(input_dim=FLAGS.hidden2,
+                                           output_dim=FLAGS.hidden2,
+                                           num_graphs = self.num_graphs,
+                                           act=lambda x: x,
+                                           sim_idx=self.sim_idx,
+                                           dropout=self.dropout)(self.hidden2)
 
         self.reconstructions = InnerProductDecoder(input_dim=FLAGS.hidden2,
                                            num_graphs = self.num_graphs,
