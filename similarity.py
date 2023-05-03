@@ -9,10 +9,12 @@ def similarity_matrix(adj):
     simrank = nx.simrank_similarity(G)
     simrank = sp.csr_matrix([[simrank[u][v] for v in G] for u in G]) """
 
-    degrees = adj.sum(axis=0)
+    adj_ = adj
+    adj_.data = np.ones(len(adj_.data))
+    degrees = adj_.sum(axis=0)
     degrees[degrees == 1] = 0
     weights = sp.csr_matrix(1 / np.log10(degrees))
-    A = adj.multiply(weights) * adj.T
+    A = adj_.multiply(weights) * adj_.T
     A.data[np.isnan(A.data)] = 0
     A.data[np.isinf(A.data)] = 0
     adamic_adar = A
@@ -27,6 +29,8 @@ def similarity_matrix(adj):
     A.data[np.isnan(A.data)] = 0
     A.data[np.isinf(A.data)] = 0
     jaccard_index = A
+
+    common_neighbor = np.dot(adj, adj)
 
     alpha = 0.5
     S = sp.csr_matrix(np.sqrt(1 / np.sum(adj, axis=0))).multiply(adj)
@@ -61,5 +65,4 @@ def similarity_matrix(adj):
     A.data[np.isinf(A.data)] = 0
     rwr = A + A.transpose()
 
-    # return [adamic_adar, jaccard_index, von_neumann, rwr, adj + sp.eye(adj.shape[0])]
-    return [adamic_adar, von_neumann, rwr, adj + sp.eye(adj.shape[0])]
+    return [adamic_adar, common_neighbor, von_neumann, rwr, adj + sp.eye(adj.shape[0])]

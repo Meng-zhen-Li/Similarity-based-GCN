@@ -98,17 +98,8 @@ class LinearLayer(Layer):
 
     def _call(self, inputs):
         inputs = tf.nn.dropout(inputs, 1-self.dropout)
-        if FLAGS.distributed == 1:
-            weights = tf.gather(self.vars['weights'], tf.range(self.input_dim) + self.sim_idx * self.input_dim, axis=1)
-            outputs = tf.matmul(inputs, weights)
-        else:
-            for i in range(self.num_graphs):
-                weights = tf.gather(self.vars['weights'], tf.range(self.input_dim) + i * self.input_dim, axis=1)
-                x = tf.matmul(inputs, weights)
-                if i == 0:
-                    outputs = x
-                else:
-                    outputs = tf.concat([outputs, x], 0)
+        weights = tf.gather(self.vars['weights'], tf.range(self.input_dim) + self.sim_idx * self.input_dim, axis=1)
+        outputs = tf.matmul(inputs, weights)
         outputs = self.act(outputs)
         return outputs
 
@@ -123,15 +114,6 @@ class InnerProductDecoder(Layer):
 
     def _call(self, inputs):
         inputs = tf.nn.dropout(inputs, 1-self.dropout)
-        if FLAGS.distributed == 1:
-            outputs = tf.matmul(inputs, tf.transpose(inputs))
-        else:
-            x = tf.split(inputs, self.num_graphs)
-            for i in range(self.num_graphs):
-                if i == 0:
-                    outputs = tf.matmul(x[i], tf.transpose(x[i]))
-                else:
-                    outputs = tf.concat([outputs, tf.matmul(x[i], tf.transpose(x[i]))], 0)
-
+        outputs = tf.matmul(inputs, tf.transpose(inputs))
         outputs = self.act(outputs)
         return outputs

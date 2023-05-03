@@ -65,3 +65,32 @@ def preprocess_features(features):
     r_mat_inv = sp.diags(r_inv)
     features = r_mat_inv.dot(features)
     return sparse_to_tuple(features)
+
+
+def add_noise(adj, noise_level):
+    if noise_level > 0:
+        # add edges
+        num_edges = sp.triu(adj).count_nonzero()
+        num_perturb = np.int(num_edges * noise_level)
+        idx = sp.find(adj==0)
+        idx = np.append([idx[0]], [idx[1]], axis=0)
+        idx = np.transpose(idx[:, idx[0, :] < idx[1, :]])
+        np.random.shuffle(idx)
+        idx = np.transpose(idx[:num_perturb, :])
+        noise_matrix = sp.csr_matrix((np.ones(num_perturb), (idx[0,:], idx[1,:])), shape=adj.shape)
+        noise_matrix = noise_matrix + noise_matrix.transpose()
+        noise_matrix.data = np.ones(len(noise_matrix.data))
+        new_adj = adj + noise_matrix
+        
+        # remove edges
+        idx = sp.find(sp.triu(adj))
+        idx = np.transpose(np.append([idx[0]], [idx[1]], axis=0))
+        np.random.shuffle(idx)
+        idx = np.transpose(idx[:num_perturb, :])
+        noise_matrix = sp.csr_matrix((np.ones(num_perturb), (idx[0,:], idx[1,:])), shape=adj.shape)
+        noise_matrix = noise_matrix + noise_matrix.transpose()
+        new_adj = new_adj - noise_matrix
+        new_adj.eliminate_zeros()
+        return new_adj
+    else:
+        return adj
