@@ -57,20 +57,17 @@ def train(adj, similarities, features):
     # Train model
     costs = [0 for i in range(len(similarities))]
     accs = [0 for i in range(len(similarities))]
+    grads = [np.zeros((num_features, FLAGS.hidden1)), np.zeros((FLAGS.hidden1, FLAGS.hidden2)), np.zeros((FLAGS.hidden2, FLAGS.hidden2 * n))]
     for epoch in range(FLAGS.epochs):
         t = time.time()
         for sim_idx in range(len(similarities)):
             with tf.device(devices[sim_idx % len(devices)]):
-                # Construct feed dictionary
                 feed_dict = construct_feed_dict(adj, similarities[sim_idx], features, placeholders, sim_idx=sim_idx)
                 feed_dict.update({placeholders['dropout']: FLAGS.dropout})
                 # Run single weight update
                 outs = sess.run([opt.cost, model.reconstructions, opt.grads_vars], feed_dict=feed_dict)
                 acc = r2_score(np.array(similarities_sparse[sim_idx].todense()), outs[1])
-                if sim_idx == 0:
-                    grads = [x[0] for x in outs[2]]
-                else:
-                    grads = [grads[i] + outs[2][i][0] for i in range(3)]
+                grads = [grads[i] + outs[2][i][0] for i in range(3)]
                 # Compute loss
                 costs[sim_idx] = outs[0]
                 accs[sim_idx] = acc
