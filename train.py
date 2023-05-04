@@ -55,10 +55,11 @@ def train(adj, similarities, features):
     best_acc = 0
 
     # Train model
-    costs = [0 for i in range(len(similarities))]
-    accs = [0 for i in range(len(similarities))]
-    grads = [np.zeros((num_features, FLAGS.hidden1)), np.zeros((FLAGS.hidden1, FLAGS.hidden2)), np.zeros((FLAGS.hidden2, FLAGS.hidden2 * n))]
+    
     for epoch in range(FLAGS.epochs):
+        costs = [0 for i in range(len(similarities))]
+        accs = [0 for i in range(len(similarities))]
+        grads = [np.zeros((num_features, FLAGS.hidden1)), np.zeros((FLAGS.hidden1, FLAGS.hidden2)), np.zeros((FLAGS.hidden2, FLAGS.hidden2 * n))]
         t = time.time()
         for sim_idx in range(len(similarities)):
             with tf.device(devices[sim_idx % len(devices)]):
