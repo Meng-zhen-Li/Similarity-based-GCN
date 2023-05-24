@@ -2,7 +2,10 @@ import numpy as np
 import scipy.sparse as sp
 
 import tensorflow.compat.v1 as tf
+tf.disable_eager_execution()
 
+flags = tf.app.flags
+FLAGS = flags.FLAGS
 
 def sample_mask(idx, l):
     """Create mask."""
@@ -11,20 +14,17 @@ def sample_mask(idx, l):
     return np.array(mask, dtype=np.bool)
 
 
-def construct_feed_dict(adj, similarity, features, placeholders, sim_idx=0):
+def construct_feed_dict(adj, similarities, features, placeholders):
     # construct feed dictionary
     feed_dict = dict()
     feed_dict.update({placeholders['features']: features})
     feed_dict.update({placeholders['adj']: adj})
-    feed_dict.update({placeholders['similarity']: similarity})
-    feed_dict.update({placeholders['sim_idx']: sim_idx})
+    feed_dict.update({placeholders['similarities']: similarities})
+    feed_dict.update({placeholders['dropout']: FLAGS.dropout})
     return feed_dict
 
 
 def weight_variable_glorot(input_dim, output_dim, name=""):
-    """Create a weight variable with Glorot & Bengio (AISTATS 2010)
-    initialization.
-    """
     init_range = np.sqrt(6.0 / (input_dim + output_dim))
     initial = tf.random_uniform([input_dim, output_dim], minval=-init_range,
                                 maxval=init_range, dtype=tf.float32)
@@ -71,7 +71,7 @@ def add_noise(adj, noise_level):
     if noise_level > 0:
         # add edges
         num_edges = sp.triu(adj).count_nonzero()
-        num_perturb = np.int(num_edges * noise_level)
+        num_perturb = np.int(num_edges * noise_level / 2)
         idx = sp.find(adj==0)
         idx = np.append([idx[0]], [idx[1]], axis=0)
         idx = np.transpose(idx[:, idx[0, :] < idx[1, :]])
@@ -85,6 +85,9 @@ def add_noise(adj, noise_level):
         # remove edges
         idx = sp.find(sp.triu(adj))
         idx = np.transpose(np.append([idx[0]], [idx[1]], axis=0))
+        values, counts = np.unique(idx, return_counts=True)
+        to_remove = values[counts==1]
+        idx = idx[~(np.isin(idx, to_remove)).any(axis=1), :]
         np.random.shuffle(idx)
         idx = np.transpose(idx[:num_perturb, :])
         noise_matrix = sp.csr_matrix((np.ones(num_perturb), (idx[0,:], idx[1,:])), shape=adj.shape)

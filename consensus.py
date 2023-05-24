@@ -157,8 +157,7 @@ class GCCA:
         return mat
 
 def consensus(embeddings):
-    gcca = GCCA(reg_param=0.01, n_components=FLAGS.hidden2)
+    gcca = GCCA(reg_param=0.1, n_components=FLAGS.hidden2)
     gcca.fit(*embeddings)
     embeddings = gcca.transform(*embeddings)
-    emb = np.mean(embeddings, axis=0)
-    return sp.csr_matrix(emb)
+    return np.mean(embeddings, axis=0)

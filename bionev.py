@@ -10,6 +10,10 @@ from sklearn.multiclass import OneVsRestClassifier
 from sklearn.preprocessing import MultiLabelBinarizer
 
 
+def precision_at_k_score(y_true, y_pred_proba, k=1000, pos_label=1):
+    topk = [y_true_ == pos_label for y_true_, y_pred_proba_ in sorted(zip(y_true, y_pred_proba), key=lambda y: y[1], reverse=True)[:k]]
+    return sum(topk) / len(topk)
+
 def LinkPrediction(embedding_look_up, original_graph, train_graph, test_pos_edges, seed):
     random.seed(seed)
 
@@ -74,9 +78,17 @@ def LinkPrediction(embedding_look_up, original_graph, train_graph, test_pos_edge
     auc_pr = average_precision_score(y_test, y_pred_proba)
     accuracy = accuracy_score(y_test, y_pred)
     f1 = f1_score(y_test, y_pred)
-    print('#' * 9 + ' Link Prediction Performance ' + '#' * 9)
-    print(f'AUC-ROC: {auc_roc:.3f}, AUC-PR: {auc_pr:.3f}, Accuracy: {accuracy:.3f}, F1: {f1:.3f}')
-    print('#' * 50)
+    f = open('results.txt', 'a')
+
+    """ precision_at_k = [precision_at_k_score(y_test, y_pred_proba, x) for x in [1, 10, 100, 1000, 10000]]
+    for score in precision_at_k:
+        f.write(f'{score:.3f},')
+    f.write('\n') """
+
+    f.write('#' * 9 + ' Link Prediction Performance ' + '#' * 9 + '\n')
+    f.write(f'AUC-ROC: {auc_roc:.3f}, AUC-PR: {auc_pr:.3f}, Accuracy: {accuracy:.3f}, F1: {f1:.3f}' + '\n')
+    f.write('#' * 50 + '\n' + '\n')
+    f.close()
     return auc_roc, auc_pr, accuracy, f1
 
 
@@ -100,9 +112,11 @@ def NodeClassification(embedding_look_up, node_list, labels, testing_ratio, seed
     micro_f1 = f1_score(y_test, y_pred, average="micro")
     macro_f1 = f1_score(y_test, y_pred, average="macro")
 
-    print('#' * 9 + ' Node Classification Performance ' + '#' * 9)
-    print(f'Accuracy: {accuracy:.3f}, Micro-F1: {micro_f1:.3f}, Macro-F1: {macro_f1:.3f}')
-    print('#' * 50)
+    f = open('results.txt', 'a')
+    f.write('#' * 9 + ' Node Classification Performance ' + '#' * 9 + '\n')
+    f.write(f'Accuracy: {accuracy:.3f}, Micro-F1: {micro_f1:.3f}, Macro-F1: {macro_f1:.3f}' + '\n')
+    f.write('#' * 50 + '\n' + '\n')
+    f.close()
     return accuracy, micro_f1, macro_f1
 
 

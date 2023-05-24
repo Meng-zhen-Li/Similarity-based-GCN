@@ -44,7 +44,6 @@ class GCNModel(Model):
         self.inputs = placeholders['features']
         self.input_dim = num_features
         self.adj = placeholders['adj']
-        self.sim_idx = placeholders['sim_idx']
         self.dropout = placeholders['dropout']
         self.features_nonzero = features_nonzero
         self.num_graphs = num_graphs
@@ -70,7 +69,6 @@ class GCNModel(Model):
                                            output_dim=FLAGS.hidden2,
                                            num_graphs = self.num_graphs,
                                            act=lambda x: x,
-                                           sim_idx=self.sim_idx,
                                            dropout=self.dropout)(self.hidden2)
 
         self.reconstructions = InnerProductDecoder(input_dim=FLAGS.hidden2,

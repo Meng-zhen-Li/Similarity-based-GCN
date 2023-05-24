@@ -1,9 +1,12 @@
+import random
 import tensorflow.compat.v1 as tf
 
 from utils import weight_variable_glorot
 
-flags = tf.app.flags
-FLAGS = flags.FLAGS
+devices = tf.config.get_visible_devices('GPU')
+if len(devices) == 0:
+    devices = tf.config.get_visible_devices()
+devices = [device.name.replace('physical_device:', '') for device in devices]
 
 # global unique layer ID dictionary for layer name assignment
 _LAYER_UIDS = {}
@@ -86,10 +89,28 @@ class GraphConvolution(Layer):
         return outputs
 
 class LinearLayer(Layer):
-    def __init__(self, input_dim, output_dim, sim_idx=0, num_graphs=1, dropout=0., act=tf.nn.sigmoid, **kwargs):
+    def __init__(self, input_dim, output_dim, num_graphs=1, dropout=0., act=tf.nn.sigmoid, **kwargs):
         super(LinearLayer, self).__init__(**kwargs)
         with tf.variable_scope(self.name + '_vars'):
             self.vars['weights'] = weight_variable_glorot(input_dim, output_dim * num_graphs, name="weights")
+        self.num_graphs = num_graphs
+        self.dropout = dropout
+        self.act = act
+        self.input_dim = input_dim
+
+    def _call(self, inputs):
+        inputs = tf.nn.dropout(inputs, 1-self.dropout)
+        outputs = [None for i in range(self.num_graphs)]
+        for sim_idx in range(self.num_graphs):
+            with tf.device(devices[sim_idx % len(devices)]):
+                outputs[sim_idx] = tf.matmul(inputs, tf.gather(self.vars['weights'], tf.range(self.input_dim) + sim_idx * self.input_dim, axis=1))
+        outputs = self.act(tf.concat(outputs, 0))
+        return outputs
+
+class InnerProductDecoder(Layer):
+    """Decoder model layer for link prediction."""
+    def __init__(self, input_dim, sim_idx=0, num_graphs=1, dropout=0., act=tf.nn.sigmoid, **kwargs):
+        super(InnerProductDecoder, self).__init__(**kwargs)
         self.num_graphs = num_graphs
         self.dropout = dropout
         self.act = act
@@ -98,22 +119,10 @@ class LinearLayer(Layer):
 
     def _call(self, inputs):
         inputs = tf.nn.dropout(inputs, 1-self.dropout)
-        weights = tf.gather(self.vars['weights'], tf.range(self.input_dim) + self.sim_idx * self.input_dim, axis=1)
-        outputs = tf.matmul(inputs, weights)
-        outputs = self.act(outputs)
-        return outputs
-
-class InnerProductDecoder(Layer):
-    """Decoder model layer for link prediction."""
-    def __init__(self, input_dim, num_graphs=1, dropout=0., act=tf.nn.sigmoid, **kwargs):
-        super(InnerProductDecoder, self).__init__(**kwargs)
-        self.num_graphs = num_graphs
-        self.dropout = dropout
-        self.act = act
-        self.input_dim = input_dim
-
-    def _call(self, inputs):
-        inputs = tf.nn.dropout(inputs, 1-self.dropout)
-        outputs = tf.matmul(inputs, tf.transpose(inputs))
-        outputs = self.act(outputs)
+        inputs = tf.split(inputs, self.num_graphs)
+        outputs = [None for i in range(self.num_graphs)]
+        for sim_idx in range(self.num_graphs):
+            with tf.device(devices[sim_idx % len(devices)]):
+                outputs[sim_idx] = tf.matmul(inputs[sim_idx], tf.transpose(inputs[sim_idx]))
+        outputs = self.act(tf.concat(outputs, 0))
         return outputs

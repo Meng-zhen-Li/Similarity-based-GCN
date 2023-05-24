@@ -15,7 +15,12 @@ from sklearn.metrics import r2_score
 
 flags = tf.app.flags
 FLAGS = flags.FLAGS
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2' 
 
+def r2(pair):
+    label = pair[0]
+    pred = pair[1]
+    return r2_score(np.array(label.todense()), pred)
 
 def train(adj, similarities, features):
     tf.reset_default_graph()
@@ -23,77 +28,48 @@ def train(adj, similarities, features):
     placeholders = {
         'features': tf.sparse_placeholder(tf.float32),
         'adj': tf.sparse_placeholder(tf.float32),
-        'similarity': tf.sparse_placeholder(tf.float32),
-        'sim_idx': tf.placeholder_with_default(0, shape=()),
-        'dropout': tf.placeholder_with_default(0., shape=()), 
-        'gradient0': tf.placeholder(tf.float32), 
-        'gradient1': tf.placeholder(tf.float32), 
-        'gradient2': tf.placeholder(tf.float32)
+        'similarities': tf.sparse_placeholder(tf.float32),
+        'dropout': tf.placeholder_with_default(0., shape=())
     }
 
     num_features = features[2][1]
     features_nonzero = features[1].shape[0]
     n = len(similarities)
-    similarities_sparse = [x / np.max(x) for x in similarities]
-    similarities = [sparse_to_tuple(x / np.max(x)) for x in similarities]
+    similarities = [x / np.max(x) for x in similarities]
+    similarities = sp.vstack(similarities)
+    similarities = sparse_to_tuple(similarities)
 
 
     model = GCNModel(placeholders, num_features, features_nonzero, n)
     with tf.name_scope('optimizer'):
-        opt = Optimizer(model.reconstructions, tf.sparse_tensor_to_dense(placeholders['similarity'], validate_indices=False), placeholders)
+        opt = Optimizer(model.reconstructions, tf.sparse_tensor_to_dense(placeholders['similarities'], validate_indices=False), n)
 
     # Initialize session
-    devices = tf.config.get_visible_devices('GPU')
-    if len(devices) == 0:
-        devices = tf.config.get_visible_devices()
-    devices = [device.name.replace('physical_device:', '') for device in devices]
-    config = tf.ConfigProto()
+    config = tf.ConfigProto(allow_soft_placement=True, log_device_placement=True)
     config.gpu_options.allow_growth = True
     sess = tf.Session(config=config)
     sess.run(tf.global_variables_initializer())
     saver = tf.compat.v1.train.Saver()
-    best_acc = 0
+    best_acc = -np.inf
 
     # Train model
-    
     for epoch in range(FLAGS.epochs):
-        costs = [0 for i in range(len(similarities))]
-        accs = [0 for i in range(len(similarities))]
-        grads = [np.zeros((num_features, FLAGS.hidden1)), np.zeros((FLAGS.hidden1, FLAGS.hidden2)), np.zeros((FLAGS.hidden2, FLAGS.hidden2 * n))]
         t = time.time()
-        for sim_idx in range(len(similarities)):
-            with tf.device(devices[sim_idx % len(devices)]):
-                feed_dict = construct_feed_dict(adj, similarities[sim_idx], features, placeholders, sim_idx=sim_idx)
-                feed_dict.update({placeholders['dropout']: FLAGS.dropout})
-                # Run single weight update
-                outs = sess.run([opt.cost, model.reconstructions, opt.grads_vars], feed_dict=feed_dict)
-                acc = r2_score(np.array(similarities_sparse[sim_idx].todense()), outs[1])
-                grads = [grads[i] + outs[2][i][0] for i in range(3)]
-                # Compute loss
-                costs[sim_idx] = outs[0]
-                accs[sim_idx] = acc
-
-        # update and apply gradients
-        grads[:2] = [grads[i] / n for i in range(2)]
-
-        for i in range(3):
-            feed_dict.update({placeholders['gradient' + str(i)]: grads[i]})
-
+        feed_dict = construct_feed_dict(adj, similarities, features, placeholders)
+        outs = sess.run([opt.costs, opt.opt_op, opt.r2], feed_dict=feed_dict)
         # save model
-        if np.mean(accs) >= best_acc:
+        if np.mean(outs[2]) >= best_acc:
             saver.save(sess, 'models/' + FLAGS.dataset)
-            best_acc = np.mean(accs)
-        sess.run(opt.opt_op, feed_dict=feed_dict)
+            best_acc = np.mean(outs[2])
 
         # print loss and accuracy
-        print("Epoch:", '%04d' % (epoch + 1), "cost=", "{:.5e}".format(np.mean(costs)), "r2=", "{:.5f}".format(np.mean(accs)), "time=", "{:.5f}".format(time.time() - t))
+        print("Epoch:", '%04d' % (epoch + 1), "cost=", "{:.5e}".format(np.mean(outs[0])), "r2=", "{:.5f}".format(np.mean(outs[2])), "time=", "{:.5f}".format(time.time() - t))
 
     print("Optimization Finished!")
 
     # restore best model and reconstruct embeddings
     saver.restore(sess, 'models/' + FLAGS.dataset)
     emb = [None for i in range(len(similarities))]
-    for sim_idx in range(len(similarities)):
-        feed_dict = construct_feed_dict(adj, similarities[sim_idx], features, placeholders, sim_idx=sim_idx)
-        emb[sim_idx] = sess.run(model.embeddings, feed_dict=feed_dict)
-    return emb
+    feed_dict = construct_feed_dict(adj, similarities, features, placeholders)
+    emb = sess.run(model.embeddings, feed_dict=feed_dict)
+    return np.split(emb, n)
