@@ -41,7 +41,7 @@ def similarity_matrix(adj):
     A = alpha * S
     alpha2 = alpha
     for i in range(3):
-        S2 = S2 * S
+        S2 = S2.dot(S)
         alpha2 = alpha2 * alpha
         A = A + alpha2 * S2
     A.data[np.isnan(A.data)] = 0
@@ -58,7 +58,7 @@ def similarity_matrix(adj):
     A = alpha * S
     alpha2 = alpha
     for i in range(3):
-        S2 = S2 * S
+        S2 = S2.dot(S)
         alpha2 = alpha2 * alpha
         A = A + alpha2 * S2
     A.data[np.isnan(A.data)] = 0
