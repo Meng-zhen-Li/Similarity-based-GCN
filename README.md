@@ -23,3 +23,12 @@ The basic parameters of GraphCan:
   3. Von Neumann
   4. Random Walk with Restart
   5. Adjacency Matrix
+
+## Citation
+@inproceedings{li2023canonical,
+  title={Canonical Representation of Biological Networks Using Graph Convolution},
+  author={Li, Mengzhen and Co{\c{s}}kun, Mustafa and Koyut{\"u}rk, Mehmet},
+  booktitle={Proceedings of the 14th ACM International Conference on Bioinformatics, Computational Biology, and Health Informatics},
+  pages={1--9},
+  year={2023}
+}
